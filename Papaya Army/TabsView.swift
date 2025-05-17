@@ -17,12 +17,16 @@ struct TabsView: View {
 	]
 	var seasonId: String
 	var body: some View {
-		TabContainer(cards: $cards, selection: $activeTab) {
-			GrandPrixSchedulesView(cards: $cards, seasonid: seasonId)
-				.tabBarItem(tab: .schedule, selection: $activeTab)
+		ZStack {
+//			AnimatedBackgroundView()
 			
-			StandingsView(seasonId: seasonId)
-				.tabBarItem(tab: .standing, selection: $activeTab)
+			TabContainer(cards: $cards, selection: $activeTab) {
+				GrandPrixSchedulesView(cards: $cards, seasonid: seasonId)
+					.tabBarItem(tab: .schedule, selection: $activeTab)
+				
+				StandingsView(seasonId: seasonId)
+					.tabBarItem(tab: .standing, selection: $activeTab)
+			}
 		}
 	}
 }

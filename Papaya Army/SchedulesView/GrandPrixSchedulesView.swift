@@ -34,93 +34,94 @@ struct GrandPrixSchedulesView: View {
 	var seasonid: String
 	var body: some View {
 		ZStack {
-			AnimatedBackgroundView()
-
-			ZStack {
-				if let grandPrixSchedules {
-					// ForEach 的 id：
-					// 如果 id 不变 → 认为是同一个视图，属性变化会渐变动画
-					// 如果 id 变了 → 认为是新视图，删除旧视图，新建一个视图
-					ForEach(cards, id: \.id) { card in
-						CardView(gpName: grandPrixSchedules[card.roundIndex].gpName)
-							.frame(width: 280, height: 250)
-							.scaleEffect(((isLongPressed || isShortPressed) && pressedID == card.id) ? 1.12 : 1)
-							.shadow(color: .black, radius: 5)
-							.offset(y: card.offset * 5)
-							.offset(draggingCard?.id == card.id ? dragAmount : .zero)
-							.onLongPressGesture(minimumDuration: 0.3) { // 长按松开后的处理
-								withAnimation {
-									isLongPressed = true
-									selectedCard = card
-								}
-							} onPressingChanged: { isPressingNow in // 从不按到按走一次，从按到不按走一次，只要按压变了，都会走的
-								withAnimation(.spring(response: 0.5, dampingFraction: 2, blendDuration: 0)) {
-									if isPressingNow {
-										pressedID = card.id
-										isShortPressed = true
-										DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-											if isLongPressed {
-												triggerHapticFeedback()
-											}
+			if let grandPrixSchedules {
+				// ForEach 的 id：
+				// 如果 id 不变 → 认为是同一个视图，属性变化会渐变动画
+				// 如果 id 变了 → 认为是新视图，删除旧视图，新建一个视图
+				ForEach(cards, id: \.id) { card in
+					CardView(gpName: grandPrixSchedules[card.roundIndex].gpName)
+						.frame(width: 280, height: 250)
+						.scaleEffect(((isLongPressed || isShortPressed) && pressedID == card.id) ? 1.12 : 1)
+						.shadow(color: .black, radius: 5)
+						.offset(y: card.offset * 5)
+						.offset(draggingCard?.id == card.id ? dragAmount : .zero)
+						.onLongPressGesture(minimumDuration: 0.3) { // 长按松开后的处理
+							withAnimation {
+								isLongPressed = true
+								selectedCard = card
+							}
+						} onPressingChanged: { isPressingNow in // 从不按到按走一次，从按到不按走一次，只要按压变了，都会走的
+							withAnimation(.spring(response: 0.5, dampingFraction: 2, blendDuration: 0)) {
+								if isPressingNow {
+									pressedID = card.id
+									isShortPressed = true
+									DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+										if isLongPressed {
+											triggerHapticFeedback()
 										}
-									} else {
-										isShortPressed = false
 									}
+								} else {
+									isShortPressed = false
 								}
 							}
-							.gesture(
-								DragGesture()
-									.onChanged {
-										dragAmount = $0.translation
-										draggingCard = card
-									}
-									.onEnded { _ in
-										withAnimation {
-											dragAmount = .zero
-											draggingCard = nil
+						}
+						.gesture(
+							DragGesture()
+								.onChanged {
+									dragAmount = $0.translation
+									draggingCard = card
+								}
+								.onEnded { _ in
+									withAnimation {
+										dragAmount = .zero
+										draggingCard = nil
 
-											let cardsCount = cards.count
-											var topCard = cards.removeLast()
-											topCard.roundIndex = (topCard.roundIndex + cardsCount) % grandPrixSchedulesCount
-											cards.insert(topCard, at: cards.startIndex)
+										let cardsCount = cards.count
+										var topCard = cards.removeLast()
+										topCard.roundIndex = (topCard.roundIndex + cardsCount) % grandPrixSchedulesCount
+										cards.insert(topCard, at: cards.startIndex)
 
-											// 改变每张卡片的 offset
-											for index in cards.indices {
-												cards[index].offset = Double(index) + 1
-											}
+										// 改变每张卡片的 offset
+										for index in cards.indices {
+											cards[index].offset = Double(index) + 1
 										}
 									}
-							)
-					}
-				} else {
-					LottieView(name: .loading, animationSpeed: 0.5, loopMode: .loop)
+								}
+						)
 				}
+			} else {
+				LottieView(name: .loading, animationSpeed: 0.5, loopMode: .loop)
 			}
-			.sheet(item: $selectedCard, onDismiss: {
-				withAnimation {
-					isLongPressed = false
-				}
-			}, content: { card in
-				if let grandPrix = grandPrixSchedules?[card.roundIndex] {
-					StagesScheduleView(gpSchedule: grandPrix)
-						.presentationBackground(.ultraThinMaterial)
-						.presentationDetents([.medium, .large])
-				} else {
-					LottieView(name: .loading, animationSpeed: 0.5, loopMode: .loop)
-				}
-			})
-			.onAppear {
-				Task {
-					if let grandPrixSchedules = fileURL.loadDataFromFileManager() {
-						self.grandPrixSchedules = grandPrixSchedules
-					}
-					grandPrixSchedules = await GrandPrixSchedulesManager.shared.retrieveGrandPrixSchedules()
-					if grandPrixSchedules != grandPrixSchedules {
-						grandPrixSchedules = grandPrixSchedules
-						fileURL.saveDataToFileManager(grandPrixSchedules ?? nil)
-					}
-				}
+		}
+		.sheet(item: $selectedCard, onDismiss: {
+			withAnimation {
+				isLongPressed = false
 			}
+		}, content: { card in
+			if let grandPrix = grandPrixSchedules?[card.roundIndex] {
+				StagesScheduleView(gpSchedule: grandPrix)
+					.presentationBackground(.ultraThinMaterial)
+					.presentationDetents([.medium, .large])
+			} else {
+				LottieView(name: .loading, animationSpeed: 0.5, loopMode: .loop)
+			}
+		})
+		.onAppear {
+			Task {
+				await loadSchedules()
+			}
+		}
+	}
+
+	/// load gp schedules asyncronously
+	func loadSchedules() async {
+		if let grandPrixSchedules = fileURL.loadDataFromFileManager() {
+			self.grandPrixSchedules = grandPrixSchedules
+		}
+		grandPrixSchedules = await GrandPrixSchedulesManager.shared.retrieveGrandPrixSchedules()
+		if grandPrixSchedules != grandPrixSchedules {
+			grandPrixSchedules = grandPrixSchedules
+			fileURL.saveDataToFileManager(grandPrixSchedules ?? nil)
 		}
 	}
 
